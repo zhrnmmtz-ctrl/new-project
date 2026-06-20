@@ -10,11 +10,12 @@ Original file is located at
 
 
 
+
 import streamlit as st
 import osmnx as ox
 import networkx as nx
 import geopandas as gpd
-from shapely.geometry import Point
+from shapely.geometry import Point, LineString
 import folium
 from streamlit_folium import st_folium
 import os
@@ -34,25 +35,21 @@ local_css("style.css")
 st.markdown('<div class="app-title">🗺️ Dasbor Aksesibilitas Multimoda Kota Bandung</div>', unsafe_allow_html=True)
 st.markdown('<div class="app-subtitle">Analisis spasial jangkauan wilayah dan jarak tempuh aktual berbasis jaringan jalan raya. <b>Klik lokasi pada peta</b> untuk memperbarui area.</div>', unsafe_allow_html=True)
 
-# --- 3. LOAD DATA (DENGAN PERBAIKAN TIPE DATA JARAK) ---
+# --- 3. LOAD DATA ---
 @st.cache_resource(show_spinner="Mempersiapkan Engine Spasial...")
 def load_graph():
     filepath = "bandung_multimodal_graph.graphml" 
     try:
         G = ox.load_graphml(filepath)
-        # Fix bug format data (Teks ke Angka) untuk waktu dan panjang jalan
         for u, v, k, data in G.edges(keys=True, data=True):
             data['waktu_tempuh'] = float(data.get('waktu_tempuh', 1.0))
-            
-            # Pastikan jarak/panjang jalan (length) terbaca sebagai angka
             try:
                 panjang = data.get('length', 0)
                 if isinstance(panjang, str) and '[' in panjang:
-                    panjang = eval(panjang)[0] # Jika format list string dari OSMnx lama
+                    panjang = eval(panjang)[0]
                 data['length'] = float(panjang)
             except:
                 data['length'] = 0.0
-                
         return G
     except Exception as e:
         st.error(f"Gagal memuat file graf. Error: {e}")
@@ -79,13 +76,13 @@ with st.sidebar:
     pilihan_halte = st.selectbox("📍 Titik Awal Cepat:", list(halte_data.keys()))
     
     st.markdown("---")
-    waktu_maksimal = st.slider("⏱️ Batas Waktu (Menit)", min_value=5, max_value=60, value=30, step=5)
+    waktu_maksimal = st.slider("⏱️ Batas Waktu (Menit)", min_value=5, max_value=60, value=20, step=5)
     
     st.markdown("---")
-    st.markdown("### 📊 Asumsi Kecepatan")
-    st.markdown("- 🚶‍♂️ **Lokal (Gang):** 4.5 km/jam")
-    st.markdown("- 🚐 **Kolektor (Angkot):** 15.0 km/jam")
-    st.markdown("- 🚌 **Arteri (Bus TMP):** 20.0 km/jam")
+    st.markdown("### 📊 Asumsi Kecepatan & Legenda")
+    st.markdown("- <span style='color:#9ca3af;'>──</span> 🚶‍♂️ **Lokal (Gang):** 4.5 km/jam", unsafe_allow_html=True)
+    st.markdown("- <span style='color:#16a34a;'>──</span> 🚐 **Kolektor (Angkot):** 15.0 km/jam", unsafe_allow_html=True)
+    st.markdown("- <span style='color:#dc2626;'>──</span> 🚌 **Arteri (Bus TMP):** 20.0 km/jam", unsafe_allow_html=True)
 
 # --- 5. STATE MANAGEMENT ---
 if 'lokasi_aktif' not in st.session_state:
@@ -100,74 +97,108 @@ lat_awal, lon_awal = st.session_state['lokasi_aktif']
 # --- 6. RENDER KARTU METRIK & PETA ---
 if G_final is not None:
     
-    # Tempat Penampungan Variabel Metrik
     luas_area_km2 = 0.0
     total_jarak_km = 0.0
     jumlah_node = 0
     simulasi_geojson = None
+    rute_edges_gdf = None # Untuk menyimpan garis jalan
     
-    # Kalkulasi Algoritma di Balik Layar
     with st.spinner('Menghitung jangkauan waktu dan jarak tempuh...'):
         try:
             center_node = ox.distance.nearest_nodes(G_final, X=lon_awal, Y=lat_awal)
             subgraph = nx.ego_graph(G_final, center_node, radius=waktu_maksimal, distance='waktu_tempuh')
             
-            # --- PERHITUNGAN METRIK JARAK & AREA ---
             jumlah_node = len(subgraph.nodes)
-            
-            # Menghitung Total Jarak Tempuh Jalan yang ter-cover (dalam Kilometer)
             total_panjang_m = sum([data.get('length', 0) for u, v, k, data in subgraph.edges(keys=True, data=True)])
             total_jarak_km = total_panjang_m / 1000
             
             node_points = [Point((data['x'], data['y'])) for node, data in subgraph.nodes(data=True)]
             
             if jumlah_node > 3:
+                # --- MEMBUAT POLIGON AREA ---
                 points_series = gpd.GeoSeries(node_points)
                 poligon = points_series.unary_union.convex_hull
-                
-                # Kalkulasi Luas Area
                 gdf_poly = gpd.GeoDataFrame(index=[0], crs="EPSG:4326", geometry=[poligon])
                 luas_area_km2 = gdf_poly.to_crs(epsg=32748).area.iloc[0] / 1e6 
-                
                 simulasi_geojson = gdf_poly
+
+                # --- MEMBUAT GARIS JALAN (EDGES) ---
+                # Kita ekstrak semua jalan yang terjangkau untuk digambar
+                edges_list = []
+                for u, v, k, data in subgraph.edges(keys=True, data=True):
+                    # Ambil koordinat node u dan v
+                    x1, y1 = subgraph.nodes[u]['x'], subgraph.nodes[u]['y']
+                    x2, y2 = subgraph.nodes[v]['x'], subgraph.nodes[v]['y']
+                    
+                    # Cek moda dari atribut yang sudah kita buat di Colab
+                    moda = data.get('moda', 'Jalan Kaki (Lokal)')
+                    
+                    # Tambahkan ke list
+                    edges_list.append({
+                        'geometry': LineString([(x1, y1), (x2, y2)]),
+                        'moda': moda
+                    })
                 
+                # Buat GeoDataFrame untuk garis jalan
+                if edges_list:
+                    rute_edges_gdf = gpd.GeoDataFrame(edges_list, crs="EPSG:4326")
+
         except Exception as e:
             st.warning("Titik awal berada di luar jaringan jalan yang valid.")
 
-    # --- RENDER KARTU DASBOR (METRICS) DI ATAS PETA ---
+    # --- RENDER KARTU DASBOR ---
     m1, m2, m3, m4 = st.columns(4)
     m1.metric(label="⏱️ Batas Waktu", value=f"{waktu_maksimal} Mnt")
     m2.metric(label="🛣️ Jaringan Jalan Diakses", value=f"{total_jarak_km:.1f} km", delta="Total Jarak Tempuh", delta_color="normal")
     m3.metric(label="📐 Luas Area Jangkauan", value=f"{luas_area_km2:.2f} km²", delta="Area Geografis", delta_color="normal")
     m4.metric(label="🚦 Persimpangan Terjangkau", value=f"{jumlah_node}", delta="Titik Node")
 
-    st.markdown("<br>", unsafe_allow_html=True) # Spasi sebelum peta
+    st.markdown("<br>", unsafe_allow_html=True) 
 
     # --- RENDER PETA ---
     m = folium.Map(location=[lat_awal, lon_awal], zoom_start=14, tiles="CartoDB positron")
     
+    # 1. Gambar Area Poligon (Warna biru pucat di belakang)
     if simulasi_geojson is not None:
         folium.GeoJson(
             simulasi_geojson,
             style_function=lambda x: {
-                'fillColor': '#3b82f6', # Biru Terang
-                'color': '#1e40af',     # Biru Gelap untuk Border
-                'weight': 3,
-                'fillOpacity': 0.25,
+                'fillColor': '#3b82f6', 
+                'color': '#1e40af',     
+                'weight': 2,
+                'fillOpacity': 0.15, # Dibuat lebih transparan agar jalan terlihat
                 'dashArray': '6, 6'
             }
         ).add_to(m)
         
+    # 2. Gambar Garis Jalan (Berdasarkan Moda)
+    if rute_edges_gdf is not None:
+        
+        # Fungsi untuk menentukan warna garis berdasarkan atribut 'moda'
+        def style_function(feature):
+            moda = feature['properties']['moda']
+            if 'Arteri' in moda or 'Bus' in moda:
+                return {'color': '#dc2626', 'weight': 4, 'opacity': 0.9} # Merah tebal
+            elif 'Kolektor' in moda or 'Angkot' in moda:
+                return {'color': '#16a34a', 'weight': 2.5, 'opacity': 0.8} # Hijau sedang
+            else:
+                return {'color': '#9ca3af', 'weight': 1, 'opacity': 0.4} # Abu-abu tipis (Jalan lokal)
+
+        folium.GeoJson(
+            rute_edges_gdf,
+            style_function=style_function
+        ).add_to(m)
+
+    # 3. Marker Pusat
     folium.Marker(
         [lat_awal, lon_awal], 
         popup=folium.Popup(f"<b>Pusat Analisis</b>", max_width=200),
-        icon=folium.Icon(color="red", icon="crosshairs", prefix='fa')
+        icon=folium.Icon(color="darkblue", icon="crosshairs", prefix='fa') # Ubah warna marker agar kontras
     ).add_to(m)
 
-    # Tampilkan Peta menggunakan Streamlit-Folium
+    # Tampilkan Peta
     map_data = st_folium(m, width="100%", height=550, key="isochrone_map_final")
 
-    # Logika Tangkap Klik Peta
     if map_data and map_data.get('last_clicked'):
         clicked_lat = map_data['last_clicked']['lat']
         clicked_lon = map_data['last_clicked']['lng']
@@ -175,6 +206,9 @@ if G_final is not None:
         if (clicked_lat, clicked_lon) != st.session_state['lokasi_aktif']:
             st.session_state['lokasi_aktif'] = (clicked_lat, clicked_lon)
             st.rerun()
+
+
+
 
 
 
