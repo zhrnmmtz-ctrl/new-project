@@ -13,18 +13,18 @@ Original file is located at
 
 
 
+
 import streamlit as st
 import osmnx as ox
 import networkx as nx
 import geopandas as gpd
 from shapely.geometry import Point, LineString
-import pydeck as pdk
-import pandas as pd
+import folium
+from streamlit_folium import st_folium
 import os
-import json
 
 # --- 1. KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="Bandung Transit 3D", layout="wide", page_icon="🏙️")
+st.set_page_config(page_title="Bandung Transit", layout="wide", page_icon="🧭")
 
 def local_css(file_name):
     if os.path.exists(file_name):
@@ -34,11 +34,11 @@ def local_css(file_name):
 local_css("style.css")
 
 # --- 2. HEADER APLIKASI ---
-st.markdown('<div class="app-title">🏙️ Bandung 3D Isochrone & Traffic Simulator</div>', unsafe_allow_html=True)
-st.markdown('<div class="app-subtitle">Analisis spasial jangkauan wilayah 3D dengan integrasi dinamika kemacetan kota.</div>', unsafe_allow_html=True)
+st.markdown('<div class="app-title">🧭 Aksesibilitas Multimoda Bandung</div>', unsafe_allow_html=True)
+st.markdown('<div class="app-subtitle">Dasbor analitik jangkauan wilayah dengan simulasi <b>Dinamika Kemacetan Kota</b>. Klik area peta untuk memperbarui simulasi.</div>', unsafe_allow_html=True)
 
 # --- 3. LOAD DATA GRAF ---
-@st.cache_resource(show_spinner="Memuat Geometri Kota Bandung...")
+@st.cache_resource(show_spinner="Menyiapkan data jaringan jalan Kota Bandung...")
 def load_graph():
     filepath = "bandung_multimodal_graph.graphml" 
     try:
@@ -59,51 +59,64 @@ def load_graph():
 
 G_final = load_graph()
 
-# --- 4. SIDEBAR (KONTROL & SKENARIO KEMACETAN) ---
+# --- 4. SIDEBAR (KONTROL) ---
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Lambang_Kota_Bandung.svg/1200px-Lambang_Kota_Bandung.svg.png", width=60)
-    st.markdown("### 🎛️ Skenario Analisis")
+    st.markdown("### 🎛️ Parameter Analisis")
     
     halte_data = {
+        "Pilih Lokasi Manual (Klik Peta)...": None,
         "Halte Alun-Alun Bandung": (-6.9218, 107.6061),
+        "Halte Stasiun Bandung": (-6.9143, 107.6022),
         "Terminal Leuwipanjang": (-6.9458, 107.5958),
         "Terminal Cicaheum": (-6.9022, 107.6536),
+        "Halte ITB (Ganesha)": (-6.8915, 107.6107),
         "Halte Gedung Sate": (-6.9025, 107.6188),
         "Gerbang Tol Pasteur": (-6.8928, 107.5888)
     }
     
-    lokasi_nama = st.selectbox("📍 Titik Keberangkatan:", list(halte_data.keys()))
-    lat_awal, lon_awal = halte_data[lokasi_nama]
+    pilihan_halte = st.selectbox("📍 Lokasi Keberangkatan:", list(halte_data.keys()))
     
-    waktu_maksimal = st.slider("⏱️ Batas Waktu Aktual (Menit)", 5, 60, 30, 5)
+    waktu_maksimal = st.slider("⏱️ Batas Waktu Aktual (Menit)", min_value=5, max_value=60, value=30, step=5)
     
     st.markdown("### 🚦 Dinamika Lalu Lintas")
     traffic_scenario = st.radio(
-        "Kondisi Jalan Raya:",
+        "Skenario Kondisi Jalan:",
         ["Lancar (Malam/Dini Hari)", "Normal (Siang Hari)", "Macet (Rush Hour)"]
     )
     
-    # Faktor impedansi lalu lintas (Mengurangi kecepatan efektif)
+    # Pengali waktu tempuh berdasarkan kemacetan
     if traffic_scenario == "Lancar (Malam/Dini Hari)":
         traffic_multiplier = 1.0
-        warna_traffic = [22, 163, 74] # Hijau
+        color_theme = '#10b981' # Hijau
     elif traffic_scenario == "Normal (Siang Hari)":
-        traffic_multiplier = 0.75 # Kecepatan turun 25%
-        warna_traffic = [234, 179, 8] # Kuning
+        traffic_multiplier = 0.75 
+        color_theme = '#eab308' # Kuning
     else:
-        traffic_multiplier = 0.45 # Kecepatan turun 55% (Macet Parah Bandung)
-        warna_traffic = [220, 38, 38] # Merah
+        traffic_multiplier = 0.45 
+        color_theme = '#ef4444' # Merah
 
-# --- 5. RENDER KARTU & PETA 3D ---
+# --- 5. STATE MANAGEMENT (ANTI ERROR) ---
+# Deklarasi awal agar memori Streamlit tidak bingung
+if 'lokasi_aktif' not in st.session_state:
+    st.session_state['lokasi_aktif'] = halte_data["Halte Alun-Alun Bandung"]
+
+# Update memori jika user memilih dropdown
+if pilihan_halte != "Pilih Lokasi Manual (Klik Peta)..." and halte_data.get(pilihan_halte) is not None:
+    if st.session_state['lokasi_aktif'] != halte_data[pilihan_halte]:
+        st.session_state['lokasi_aktif'] = halte_data[pilihan_halte]
+        
+lat_awal, lon_awal = st.session_state['lokasi_aktif']
+
+# --- 6. RENDER KARTU & PETA ---
 if G_final is not None:
     
     luas_area_km2, total_jarak_km, jumlah_node = 0.0, 0.0, 0
-    poligon_data, rute_data = [], []
+    simulasi_geojson, rute_edges_gdf = None, None
     
-    with st.spinner('Mengkalkulasi model 3D dan simulasi kemacetan...'):
+    with st.spinner(f'Menganalisis jangkauan dengan skenario {traffic_scenario}...'):
         try:
-            # Trik Geomatika: Kurangi waktu efektif berdasarkan kemacetan 
-            # (Pejalan kaki tidak terpengaruh macet, tapi karena kita menghitung general, kita asumsikan ini efek ke kendaraan)
+            # Terapkan efek kemacetan ke batas waktu
             waktu_efektif = waktu_maksimal * traffic_multiplier
             
             center_node = ox.distance.nearest_nodes(G_final, X=lon_awal, Y=lat_awal)
@@ -115,91 +128,102 @@ if G_final is not None:
             node_points = [Point((data['x'], data['y'])) for node, data in subgraph.nodes(data=True)]
             
             if jumlah_node > 3:
-                # 1. Ekstraksi Poligon untuk 3D Extrusion
                 points_series = gpd.GeoSeries(node_points)
                 poligon = points_series.unary_union.convex_hull
                 gdf_poly = gpd.GeoDataFrame(index=[0], crs="EPSG:4326", geometry=[poligon])
                 luas_area_km2 = gdf_poly.to_crs(epsg=32748).area.iloc[0] / 1e6 
-                
-                # Konversi Poligon ke format JSON untuk PyDeck
-                poligon_json = json.loads(gdf_poly.to_json())
-                poligon_data = poligon_json['features']
+                simulasi_geojson = gdf_poly
 
-                # 2. Ekstraksi Garis Jalan
+                edges_list = []
                 for u, v, k, data in subgraph.edges(keys=True, data=True):
                     if u in subgraph.nodes and v in subgraph.nodes:
-                        rute_data.append({
-                            "path": [[subgraph.nodes[u]['x'], subgraph.nodes[u]['y']], 
-                                     [subgraph.nodes[v]['x'], subgraph.nodes[v]['y']]],
-                            "moda": data.get('moda', 'Lokal')
+                        x1, y1 = subgraph.nodes[u]['x'], subgraph.nodes[u]['y']
+                        x2, y2 = subgraph.nodes[v]['x'], subgraph.nodes[v]['y']
+                        edges_list.append({
+                            'geometry': LineString([(x1, y1), (x2, y2)]),
+                            'moda': str(data.get('moda', 'Jalan Kaki (Lokal)'))
                         })
+                
+                if edges_list:
+                    rute_edges_gdf = gpd.GeoDataFrame(edges_list, crs="EPSG:4326")
 
         except Exception as e:
-            st.warning("Terjadi kesalahan komputasi rute.")
+            st.warning(f"Terjadi kesalahan komputasi rute: {e}")
 
-    # --- KARTU DASBOR ---
+    # --- KARTU DASBOR (METRICS) ---
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Status Lalu Lintas", traffic_scenario.split(" ")[0])
-    m2.metric("Jaringan Terakses", f"{total_jarak_km:.1f} km", "Kapasitas Mobilitas")
-    m3.metric("Luas Jangkauan", f"{luas_area_km2:.2f} km²", "Ekspansi Spasial")
-    m4.metric("Simpul Terjangkau", f"{jumlah_node}", "Konektivitas")
+    m2.metric("Jaringan Terakses", f"{total_jarak_km:.1f} km", "Infrastruktur")
+    m3.metric("Luas Jangkauan", f"{luas_area_km2:.2f} km²", "Cakupan Geografis")
+    m4.metric("Persimpangan", f"{jumlah_node}", "Titik Graf")
 
     st.markdown("<br>", unsafe_allow_html=True) 
 
-    # --- VISUALISASI 3D (PYDECK) ---
-    # Layer 1: Kubah 3D Area Jangkauan
-    isochrone_layer = pdk.Layer(
-        "GeoJsonLayer",
-        poligon_data,
-        opacity=0.3,
-        stroked=True,
-        filled=True,
-        extruded=True,
-        wireframe=True,
-        get_elevation=waktu_maksimal * 30, # Tinggikan poligon berdasarkan waktu
-        get_fill_color=warna_traffic + [120], # Warna dinamis dari kemacetan
-        get_line_color=[255, 255, 255]
-    )
+    # --- RENDER PETA INTERAKTIF ---
+    m = folium.Map(location=[lat_awal, lon_awal], zoom_start=14, tiles="CartoDB positron")
+    
+    # Layer Poligon Area
+    if simulasi_geojson is not None:
+        folium.GeoJson(
+            simulasi_geojson,
+            name="Area Jangkauan (Isochrone)",
+            style_function=lambda x: {
+                'fillColor': color_theme, # Warnanya berubah sesuai kemacetan (Hijau/Kuning/Merah)
+                'color': color_theme,     
+                'weight': 1.5,
+                'fillOpacity': 0.15, 
+                'dashArray': '4, 4'
+            }
+        ).add_to(m)
+        
+    # Layer Jaringan Jalan Transit
+    if rute_edges_gdf is not None:
+        gdf_jalan_kaki = rute_edges_gdf[rute_edges_gdf['moda'].str.contains('Kaki')]
+        gdf_kendaraan = rute_edges_gdf[~rute_edges_gdf['moda'].str.contains('Kaki')]
 
-    # Layer 2: Urat Nadi Transportasi (Garis Rute)
-    rute_layer = pdk.Layer(
-        "PathLayer",
-        rute_data,
-        get_path="path",
-        width_scale=20,
-        width_min_pixels=2,
-        get_color=[59, 130, 246, 200], # Biru
-        get_width=2,
-    )
+        if not gdf_jalan_kaki.empty:
+            folium.GeoJson(
+                gdf_jalan_kaki,
+                name="Jalan Lokal (Pejalan Kaki)",
+                style_function=lambda x: {'color': '#9ca3af', 'weight': 1.5, 'opacity': 0.5}
+            ).add_to(m)
 
-    # Layer 3: Titik Pusat (Pin)
-    pin_layer = pdk.Layer(
-        "ScatterplotLayer",
-        data=[{"position": [lon_awal, lat_awal]}],
-        get_position="position",
-        get_color=[255, 255, 255, 255],
-        get_radius=150,
-        pickable=True,
-    )
+        if not gdf_kendaraan.empty:
+            def style_kendaraan(feature):
+                moda = feature['properties']['moda']
+                if 'Arteri' in moda or 'Bus' in moda:
+                    return {'color': '#ef4444', 'weight': 4.5, 'opacity': 1.0} 
+                else:
+                    return {'color': '#10b981', 'weight': 3.5, 'opacity': 1.0} 
+                    
+            folium.GeoJson(
+                gdf_kendaraan,
+                name="Koridor Angkot & Bus",
+                style_function=style_kendaraan
+            ).add_to(m)
 
-    # Pengaturan Kamera 3D (Miring ke bawah)
-    view_state = pdk.ViewState(
-        latitude=lat_awal,
-        longitude=lon_awal,
-        zoom=13,
-        pitch=50, # Kemiringan 3D
-        bearing=0 # Rotasi
-    )
+    folium.LayerControl(position='topright').add_to(m)
 
-    # Render Peta
-    r = pdk.Deck(
-        layers=[isochrone_layer, rute_layer, pin_layer],
-        initial_view_state=view_state,
-        map_style="mapbox://styles/mapbox/dark-v10", # Basemap gelap futuristik
-        tooltip={"text": "Titik Pusat: {lokasi_nama}"}
-    )
+    # Pin Pusat
+    folium.Marker(
+        [lat_awal, lon_awal], 
+        popup=folium.Popup(f"<b>Pusat Analisis</b>", max_width=200),
+        icon=folium.Icon(color="blue", icon="info-sign")
+    ).add_to(m)
 
-    st.pydeck_chart(r)
+    # st_folium menangkap event klik
+    map_data = st_folium(m, width="100%", height=550, key="isochrone_map_final")
+
+    # Jika user mengklik sembarang titik di peta
+    if map_data and map_data.get('last_clicked'):
+        clicked_lat = map_data['last_clicked']['lat']
+        clicked_lon = map_data['last_clicked']['lng']
+        
+        if (clicked_lat, clicked_lon) != st.session_state['lokasi_aktif']:
+            st.session_state['lokasi_aktif'] = (clicked_lat, clicked_lon)
+            st.rerun()
+
+
 
 
 
