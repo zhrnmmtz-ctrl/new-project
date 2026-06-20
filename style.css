@@ -1,70 +1,470 @@
+/* ═══════════════════════════════════════════════════════════════════════════════
+   🎨 BANDUNG MULTI-MODAL ISOCHRONE - PREMIUM DASHBOARD STYLING
+   ═══════════════════════════════════════════════════════════════════════════════ */
 
-/* Menyembunyikan elemen bawaan Streamlit */
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
-
-/* Mengatur padding kanvas utama */
-.block-container {
-    padding-top: 2rem !important;
-    padding-bottom: 1rem !important;
-    max-width: 98% !important;
+/* --- GLOBAL STYLES --- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
-/* Styling Khusus untuk Sidebar (Mode Gelap Elegan) */
+/* Menyembunyikan elemen bawaan Streamlit */
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+header { visibility: hidden; }
+
+/* --- BACKGROUND & CANVAS --- */
+body {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.block-container {
+    padding-top: 2rem !important;
+    padding-bottom: 2rem !important;
+    max-width: 100% !important;
+    background: transparent;
+}
+
+/* --- SIDEBAR STYLING (DARK ELEGANT MODE) --- */
 [data-testid="stSidebar"] {
-    background-color: #0f172a;
-    border-right: 1px solid #1e293b;
+    background: linear-gradient(180deg, #0f172a 0%, #1a1f2e 100%);
+    border-right: 2px solid #1e293b;
 }
 
 [data-testid="stSidebar"] * {
     color: #f1f5f9 !important;
 }
 
-/* --- STYLING KARTU METRIK (KPI CARDS) --- */
+[data-testid="stSidebarNav"] {
+    background: rgba(15, 23, 42, 0.5);
+}
+
+/* Sidebar headings */
+[data-testid="stSidebar"] h3 {
+    color: #e2e8f0 !important;
+    font-weight: 700 !important;
+    margin-top: 1.5rem !important;
+    margin-bottom: 1rem !important;
+    font-size: 1rem !important;
+}
+
+/* Sidebar divider/separator */
+[data-testid="stSidebar"] hr {
+    border-color: #1e293b !important;
+}
+
+/* --- INPUT ELEMENTS STYLING --- */
+[data-testid="stSidebar"] .stSelectbox label,
+[data-testid="stSidebar"] .stSlider label,
+[data-testid="stSidebar"] .stRadio label {
+    color: #cbd5e1 !important;
+    font-weight: 500 !important;
+    font-size: 0.95rem !important;
+}
+
+/* Selectbox & Slider */
+[data-testid="stSidebar"] .stSelectbox,
+[data-testid="stSidebar"] .stSlider {
+    margin-bottom: 1.2rem;
+}
+
+/* Radio buttons */
+[data-testid="stSidebar"] .stRadio {
+    margin: 1rem 0;
+}
+
+[data-testid="stSidebar"] .stRadio label {
+    margin: 0.5rem 0 !important;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+[data-testid="stSidebar"] .stRadio label:hover {
+    background-color: rgba(148, 163, 184, 0.1);
+}
+
+/* Checkbox */
+[data-testid="stSidebar"] .stCheckbox {
+    margin: 1rem 0;
+}
+
+[data-testid="stSidebar"] .stCheckbox label {
+    margin-left: 0.5rem !important;
+    color: #cbd5e1 !important;
+}
+
+/* --- INFO/SUCCESS/WARNING BOXES (SIDEBAR) --- */
+[data-testid="stSidebar"] .stInfo,
+[data-testid="stSidebar"] .stSuccess,
+[data-testid="stSidebar"] .stWarning,
+[data-testid="stSidebar"] .stError {
+    border-radius: 12px !important;
+    padding: 1rem !important;
+    border-left: 4px solid #3b82f6 !important;
+    background-color: rgba(59, 130, 246, 0.08) !important;
+    color: #f1f5f9 !important;
+}
+
+[data-testid="stSidebar"] .stInfo {
+    border-left-color: #3b82f6 !important;
+    background-color: rgba(59, 130, 246, 0.08) !important;
+}
+
+[data-testid="stSidebar"] .stSuccess {
+    border-left-color: #10b981 !important;
+    background-color: rgba(16, 185, 129, 0.08) !important;
+}
+
+[data-testid="stSidebar"] .stWarning {
+    border-left-color: #f59e0b !important;
+    background-color: rgba(245, 158, 11, 0.08) !important;
+}
+
+[data-testid="stSidebar"] .stError {
+    border-left-color: #ef4444 !important;
+    background-color: rgba(239, 68, 68, 0.08) !important;
+}
+
+/* --- METRIC CARDS (KPI) --- */
 div[data-testid="metric-container"] {
-    background-color: #ffffff;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
     border: 1px solid #e2e8f0;
-    padding: 1rem 1.5rem;
+    padding: 1.5rem;
     border-radius: 16px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-    transition: all 0.3s ease;
-    border-left: 5px solid #3b82f6; /* Aksen garis biru di kiri */
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 
+                0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-left: 5px solid #3b82f6;
+    position: relative;
+    overflow: hidden;
 }
 
+/* Hover effect untuk metric cards */
 div[data-testid="metric-container"]:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.15), 0 4px 6px -4px rgba(59, 130, 246, 0.1);
-    border-left: 5px solid #1d4ed8;
+    transform: translateY(-8px);
+    box-shadow: 0 20px 25px -5px rgba(59, 130, 246, 0.2),
+                0 10px 10px -5px rgba(59, 130, 246, 0.1);
+    border-left-color: #1d4ed8;
 }
 
-/* Styling Teks dalam Metrik */
+/* Shimmer animation untuk metric cards */
+@keyframes shimmer {
+    0% { background-position: -1000px 0; }
+    100% { background-position: 1000px 0; }
+}
+
+div[data-testid="metric-container"]::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -1000px;
+    width: 1000px;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    animation: shimmer 3s infinite;
+}
+
+/* Label dalam metric */
 div[data-testid="metric-container"] label {
-    font-size: 0.9rem !important;
-    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+    font-weight: 700 !important;
     color: #64748b !important;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+    margin-bottom: 0.5rem !important;
 }
 
+/* Value dalam metric */
 div[data-testid="metric-container"] div[data-testid="stMetricValue"] {
-    font-size: 1.8rem !important;
-    font-weight: 800 !important;
+    font-size: 2rem !important;
+    font-weight: 900 !important;
     color: #0f172a !important;
+    margin: 0.5rem 0 !important;
 }
 
-/* Judul Aplikasi */
+/* Delta dalam metric */
+div[data-testid="metric-container"] div[data-testid="stMetricDelta"] {
+    font-size: 0.85rem !important;
+    color: #64748b !important;
+    font-weight: 500 !important;
+}
+
+/* --- JUDUL & SUBTITLE --- */
 .app-title {
-    font-size: 2.2rem;
-    font-weight: 800;
+    font-size: 2.5rem;
+    font-weight: 900;
     color: #1e293b;
-    margin-bottom: 0.2rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #0f172a 0%, #475569 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .app-subtitle {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     color: #64748b;
     margin-bottom: 2rem;
+    line-height: 1.6;
+    font-weight: 400;
 }
 
+/* --- EKSPANDER / COLLAPSIBLE SECTIONS --- */
+details {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem;
+    margin: 1rem 0;
+    transition: all 0.3s ease;
+}
 
+details:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #1e293b;
+    padding: 0.5rem;
+    user-select: none;
+}
+
+details summary:hover {
+    color: #3b82f6;
+}
+
+/* --- TABLES & DATAFRAMES --- */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+}
+
+thead th {
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    padding: 1rem;
+    text-align: left;
+    font-weight: 700;
+    color: #0f172a;
+    border-bottom: 2px solid #cbd5e1;
+}
+
+tbody td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    color: #475569;
+}
+
+tbody tr:hover {
+    background-color: #f8fafc;
+}
+
+/* --- BUTTONS --- */
+button, .stButton button {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 0.75rem 1.5rem !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3) !important;
+}
+
+button:hover, .stButton button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4) !important;
+}
+
+button:active, .stButton button:active {
+    transform: translateY(0) !important;
+}
+
+/* --- TABS --- */
+.stTabs {
+    margin: 2rem 0;
+}
+
+.stTabs [role="tab"] {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px 8px 0 0;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    color: #64748b;
+    transition: all 0.3s ease;
+    margin-right: 0.5rem;
+}
+
+.stTabs [role="tab"][aria-selected="true"] {
+    background-color: #3b82f6;
+    color: white;
+    border-bottom-color: #3b82f6;
+}
+
+.stTabs [role="tab"]:hover {
+    background-color: #e2e8f0;
+    color: #1e293b;
+}
+
+/* --- DIVIDER --- */
+hr {
+    border: none;
+    border-top: 2px solid #e2e8f0;
+    margin: 2rem 0;
+}
+
+/* --- MARKDOWN CONTENT --- */
+h1, h2, h3, h4, h5, h6 {
+    color: #1e293b;
+    font-weight: 700;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.75rem; }
+h3 { font-size: 1.5rem; }
+h4 { font-size: 1.25rem; }
+h5 { font-size: 1.1rem; }
+h6 { font-size: 1rem; }
+
+p, li {
+    color: #475569;
+    line-height: 1.6;
+    font-size: 1rem;
+}
+
+a {
+    color: #3b82f6;
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+a:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+code {
+    background-color: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    font-family: 'Courier New', monospace;
+    color: #d946ef;
+    font-size: 0.9em;
+}
+
+pre {
+    background-color: #1a1a2e;
+    color: #e2e8f0;
+    padding: 1.5rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    border-left: 4px solid #3b82f6;
+    margin: 1rem 0;
+}
+
+pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #e2e8f0;
+}
+
+blockquote {
+    border-left: 4px solid #3b82f6;
+    padding-left: 1rem;
+    margin: 1rem 0;
+    color: #64748b;
+    font-style: italic;
+}
+
+/* --- SCROLLBAR STYLING --- */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f8fafc;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* --- RESPONSIVE DESIGN --- */
+@media (max-width: 768px) {
+    .app-title {
+        font-size: 1.8rem;
+    }
+    
+    .app-subtitle {
+        font-size: 0.95rem;
+    }
+    
+    div[data-testid="metric-container"] {
+        padding: 1rem;
+    }
+    
+    div[data-testid="metric-container"] div[data-testid="stMetricValue"] {
+        font-size: 1.5rem !important;
+    }
+}
+
+/* --- ANIMATION CLASSES --- */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+.slide-in-left {
+    animation: slideInLeft 0.3s ease-in-out;
+}
+
+.pulse {
+    animation: pulse 2s infinite;
+}
