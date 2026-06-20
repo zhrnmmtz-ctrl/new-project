@@ -6,4 +6,4 @@ shapely
 folium
 streamlit-folium
 pandas
-
+scikit-learn
