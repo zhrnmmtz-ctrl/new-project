@@ -6,3 +6,5 @@ shapely
 pydeck
 pandas
 scikit-learn
+folium
+streamlit-folium
