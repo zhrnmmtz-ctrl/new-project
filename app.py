@@ -7,7 +7,6 @@ Original file is located at
     https://colab.research.google.com/drive/1TKwTiZrRd1SBJ1tX2hA3tuy2-aopyq-8
 """
 
-!pip install streamlit osmnx networkx geopandas shapely folium streamlit-folium pandas
 
 import streamlit as st
 import osmnx as ox
