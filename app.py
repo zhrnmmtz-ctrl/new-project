@@ -9,6 +9,7 @@ Original file is located at
 
 
 
+
 import streamlit as st
 import osmnx as ox
 import networkx as nx
@@ -16,24 +17,42 @@ import geopandas as gpd
 from shapely.geometry import Point
 import folium
 from streamlit_folium import st_folium
+import os
 
+# --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="Bandung Transit Isochrone", layout="wide", page_icon="🗺️")
 
-st.title("🗺️ Analisis Aksesibilitas Multimoda Kota Bandung")
-st.markdown("Cari tahu seberapa jauh Anda bisa bepergian. **Klik lokasi mana saja pada peta**, atau pilih Halte TMP dari menu di sebelah kiri!")
+# Menyuntikkan CSS
+def local_css(file_name):
+    if os.path.exists(file_name):
+        with open(file_name) as f:
+            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
-@st.cache_resource(show_spinner="Memuat jaringan jalan Kota Bandung...")
+local_css("style.css")
+
+# --- 2. HEADER ---
+st.markdown('<div class="app-title">🗺️ Dasbor Aksesibilitas Multimoda Kota Bandung</div>', unsafe_allow_html=True)
+st.markdown('<div class="app-subtitle">Analisis spasial jangkauan wilayah dan jarak tempuh aktual berbasis jaringan jalan raya. <b>Klik lokasi pada peta</b> untuk memperbarui area.</div>', unsafe_allow_html=True)
+
+# --- 3. LOAD DATA (DENGAN PERBAIKAN TIPE DATA JARAK) ---
+@st.cache_resource(show_spinner="Mempersiapkan Engine Spasial...")
 def load_graph():
     filepath = "bandung_multimodal_graph.graphml" 
     try:
         G = ox.load_graphml(filepath)
-        # --- PERBAIKAN BUG DI SINI ---
-        # Ubah tipe data 'waktu_tempuh' dari teks (string) kembali ke angka (float)
+        # Fix bug format data (Teks ke Angka) untuk waktu dan panjang jalan
         for u, v, k, data in G.edges(keys=True, data=True):
-            if 'waktu_tempuh' in data:
-                data['waktu_tempuh'] = float(data['waktu_tempuh'])
-            else:
-                data['waktu_tempuh'] = 1.0 # Default jika kosong
+            data['waktu_tempuh'] = float(data.get('waktu_tempuh', 1.0))
+            
+            # Pastikan jarak/panjang jalan (length) terbaca sebagai angka
+            try:
+                panjang = data.get('length', 0)
+                if isinstance(panjang, str) and '[' in panjang:
+                    panjang = eval(panjang)[0] # Jika format list string dari OSMnx lama
+                data['length'] = float(panjang)
+            except:
+                data['length'] = 0.0
+                
         return G
     except Exception as e:
         st.error(f"Gagal memuat file graf. Error: {e}")
@@ -41,70 +60,122 @@ def load_graph():
 
 G_final = load_graph()
 
-halte_data = {
-    "Pilih Halte / Lokasi Manual...": None,
-    "Halte Alun-Alun Bandung": (-6.9218, 107.6061),
-    "Halte Stasiun Bandung": (-6.9143, 107.6022),
-    "Terminal Leuwipanjang": (-6.9458, 107.5958),
-    "Terminal Cicaheum": (-6.9022, 107.6536),
-    "Halte ITB (Ganesha)": (-6.8915, 107.6107),
-    "Halte Gedung Sate": (-6.9025, 107.6188),
-    "Halte Pasteur (Tol)": (-6.8928, 107.5888)
-}
+# --- 4. SIDEBAR ---
+with st.sidebar:
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Lambang_Kota_Bandung.svg/1200px-Lambang_Kota_Bandung.svg.png", width=70)
+    st.markdown("## ⚙️ Panel Kontrol")
+    
+    halte_data = {
+        "Pilih Lokasi...": None,
+        "Halte Alun-Alun Bandung": (-6.9218, 107.6061),
+        "Halte Stasiun Bandung": (-6.9143, 107.6022),
+        "Terminal Leuwipanjang": (-6.9458, 107.5958),
+        "Terminal Cicaheum": (-6.9022, 107.6536),
+        "Halte ITB (Ganesha)": (-6.8915, 107.6107),
+        "Halte Gedung Sate": (-6.9025, 107.6188),
+        "Halte Pasteur (Tol)": (-6.8928, 107.5888)
+    }
+    
+    pilihan_halte = st.selectbox("📍 Titik Awal Cepat:", list(halte_data.keys()))
+    
+    st.markdown("---")
+    waktu_maksimal = st.slider("⏱️ Batas Waktu (Menit)", min_value=5, max_value=60, value=30, step=5)
+    
+    st.markdown("---")
+    st.markdown("### 📊 Asumsi Kecepatan")
+    st.markdown("- 🚶‍♂️ **Lokal (Gang):** 4.5 km/jam")
+    st.markdown("- 🚐 **Kolektor (Angkot):** 15.0 km/jam")
+    st.markdown("- 🚌 **Arteri (Bus TMP):** 20.0 km/jam")
 
-if G_final is not None:
-    col1, col2 = st.columns([1, 3])
+# --- 5. STATE MANAGEMENT ---
+if 'lokasi_aktif' not in st.session_state:
+    st.session_state['lokasi_aktif'] = halte_data["Halte Alun-Alun Bandung"]
 
-    with col1:
-        st.subheader("📍 Titik Keberangkatan")
-        pilihan_halte = st.selectbox("Pilih Halte TMP Utama:", list(halte_data.keys()))
+if pilihan_halte != "Pilih Lokasi..." and halte_data[pilihan_halte] is not None:
+    if st.session_state['lokasi_aktif'] != halte_data[pilihan_halte]:
+        st.session_state['lokasi_aktif'] = halte_data[pilihan_halte]
         
-        st.markdown("---")
-        st.subheader("⏱️ Pengaturan Waktu")
-        waktu_maksimal = st.slider("Batas Waktu Tempuh (Menit)", min_value=10, max_value=60, value=30, step=10)
+lat_awal, lon_awal = st.session_state['lokasi_aktif']
 
-    if 'lokasi_aktif' not in st.session_state:
-        st.session_state['lokasi_aktif'] = halte_data["Halte Alun-Alun Bandung"]
-
-    if pilihan_halte != "Pilih Halte / Lokasi Manual..." and halte_data[pilihan_halte] is not None:
-        if st.session_state['lokasi_aktif'] != halte_data[pilihan_halte]:
-            st.session_state['lokasi_aktif'] = halte_data[pilihan_halte]
+# --- 6. RENDER KARTU METRIK & PETA ---
+if G_final is not None:
+    
+    # Tempat Penampungan Variabel Metrik
+    luas_area_km2 = 0.0
+    total_jarak_km = 0.0
+    jumlah_node = 0
+    simulasi_geojson = None
+    
+    # Kalkulasi Algoritma di Balik Layar
+    with st.spinner('Menghitung jangkauan waktu dan jarak tempuh...'):
+        try:
+            center_node = ox.distance.nearest_nodes(G_final, X=lon_awal, Y=lat_awal)
+            subgraph = nx.ego_graph(G_final, center_node, radius=waktu_maksimal, distance='waktu_tempuh')
             
-    lat_awal, lon_awal = st.session_state['lokasi_aktif']
-
-    with col2:
-        m = folium.Map(location=[lat_awal, lon_awal], zoom_start=14, tiles="CartoDB positron")
-
-        with st.spinner('Mengkalkulasi jangkauan jaringan jalan...'):
-            try:
-                center_node = ox.distance.nearest_nodes(G_final, X=lon_awal, Y=lat_awal)
-                subgraph = nx.ego_graph(G_final, center_node, radius=waktu_maksimal, distance='waktu_tempuh')
-                node_points = [Point((data['x'], data['y'])) for node, data in subgraph.nodes(data=True)]
-                
-                if len(node_points) > 3:
-                    points_series = gpd.GeoSeries(node_points)
-                    poligon = points_series.unary_union.convex_hull
-                    simulasi_geojson = gpd.GeoDataFrame(index=[0], crs="EPSG:4326", geometry=[poligon])
-                    
-                    folium.GeoJson(
-                        simulasi_geojson,
-                        style_function=lambda x: {'fillColor': '#2563eb', 'color': '#1e3a8a', 'weight': 2, 'fillOpacity': 0.4}
-                    ).add_to(m)
-                
-                folium.Marker([lat_awal, lon_awal], icon=folium.Icon(color="red", icon="map-marker")).add_to(m)
-
-            except Exception as e:
-                st.warning(f"Titik ini terlalu jauh dari jaringan jalan (area kosong). Coba klik tempat lain. ({e})")
-
-        map_data = st_folium(m, width=900, height=550, key="isochrone_map_dynamic")
-
-        if map_data and map_data.get('last_clicked'):
-            clicked_lat = map_data['last_clicked']['lat']
-            clicked_lon = map_data['last_clicked']['lng']
+            # --- PERHITUNGAN METRIK JARAK & AREA ---
+            jumlah_node = len(subgraph.nodes)
             
-            if (clicked_lat, clicked_lon) != st.session_state['lokasi_aktif']:
-                st.session_state['lokasi_aktif'] = (clicked_lat, clicked_lon)
-                st.rerun()
+            # Menghitung Total Jarak Tempuh Jalan yang ter-cover (dalam Kilometer)
+            total_panjang_m = sum([data.get('length', 0) for u, v, k, data in subgraph.edges(keys=True, data=True)])
+            total_jarak_km = total_panjang_m / 1000
+            
+            node_points = [Point((data['x'], data['y'])) for node, data in subgraph.nodes(data=True)]
+            
+            if jumlah_node > 3:
+                points_series = gpd.GeoSeries(node_points)
+                poligon = points_series.unary_union.convex_hull
+                
+                # Kalkulasi Luas Area
+                gdf_poly = gpd.GeoDataFrame(index=[0], crs="EPSG:4326", geometry=[poligon])
+                luas_area_km2 = gdf_poly.to_crs(epsg=32748).area.iloc[0] / 1e6 
+                
+                simulasi_geojson = gdf_poly
+                
+        except Exception as e:
+            st.warning("Titik awal berada di luar jaringan jalan yang valid.")
+
+    # --- RENDER KARTU DASBOR (METRICS) DI ATAS PETA ---
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric(label="⏱️ Batas Waktu", value=f"{waktu_maksimal} Mnt")
+    m2.metric(label="🛣️ Jaringan Jalan Diakses", value=f"{total_jarak_km:.1f} km", delta="Total Jarak Tempuh", delta_color="normal")
+    m3.metric(label="📐 Luas Area Jangkauan", value=f"{luas_area_km2:.2f} km²", delta="Area Geografis", delta_color="normal")
+    m4.metric(label="🚦 Persimpangan Terjangkau", value=f"{jumlah_node}", delta="Titik Node")
+
+    st.markdown("<br>", unsafe_allow_html=True) # Spasi sebelum peta
+
+    # --- RENDER PETA ---
+    m = folium.Map(location=[lat_awal, lon_awal], zoom_start=14, tiles="CartoDB positron")
+    
+    if simulasi_geojson is not None:
+        folium.GeoJson(
+            simulasi_geojson,
+            style_function=lambda x: {
+                'fillColor': '#3b82f6', # Biru Terang
+                'color': '#1e40af',     # Biru Gelap untuk Border
+                'weight': 3,
+                'fillOpacity': 0.25,
+                'dashArray': '6, 6'
+            }
+        ).add_to(m)
+        
+    folium.Marker(
+        [lat_awal, lon_awal], 
+        popup=folium.Popup(f"<b>Pusat Analisis</b>", max_width=200),
+        icon=folium.Icon(color="red", icon="crosshairs", prefix='fa')
+    ).add_to(m)
+
+    # Tampilkan Peta menggunakan Streamlit-Folium
+    map_data = st_folium(m, width="100%", height=550, key="isochrone_map_final")
+
+    # Logika Tangkap Klik Peta
+    if map_data and map_data.get('last_clicked'):
+        clicked_lat = map_data['last_clicked']['lat']
+        clicked_lon = map_data['last_clicked']['lng']
+        
+        if (clicked_lat, clicked_lon) != st.session_state['lokasi_aktif']:
+            st.session_state['lokasi_aktif'] = (clicked_lat, clicked_lon)
+            st.rerun()
+
 
 
 
