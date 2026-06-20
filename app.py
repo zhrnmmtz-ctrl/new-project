@@ -36,7 +36,7 @@ st.markdown('<div class="app-subtitle">Dasbor analitik jangkauan wilayah dengan 
 # --- 3. LOAD DATA GRAF ---
 @st.cache_resource(show_spinner="Menyiapkan data jaringan jalan Kota Bandung...")
 def load_graph():
-    filepath = "bandung_multimodal_graph.graphml" 
+    filepath = "bandung_multimodal_graph_lite.graphml" 
     try:
         G = ox.load_graphml(filepath)
         for u, v, k, data in G.edges(keys=True, data=True):
