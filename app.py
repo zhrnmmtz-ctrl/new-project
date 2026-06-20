@@ -10,10 +10,6 @@ Original file is located at
 
 
 
-
-
-
-
 import streamlit as st
 import osmnx as ox
 import networkx as nx
@@ -60,6 +56,9 @@ def load_graph():
 G_final = load_graph()
 
 # --- 4. SIDEBAR (KONTROL) ---
+traffic_multiplier = 1.0
+color_theme = '#10b981'
+
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Lambang_Kota_Bandung.svg/1200px-Lambang_Kota_Bandung.svg.png", width=60)
     st.markdown("### 🎛️ Parameter Analisis")
@@ -90,10 +89,10 @@ with st.sidebar:
         traffic_multiplier = 1.0
         color_theme = '#10b981' # Hijau
     elif traffic_scenario == "Normal (Siang Hari)":
-        traffic_multiplier = 0.75 
+        traffic_multiplier = 1.2
         color_theme = '#eab308' # Kuning
-    else:
-        traffic_multiplier = 0.45 
+    else:  # Macet (Rush Hour)
+        traffic_multiplier = 1.5
         color_theme = '#ef4444' # Merah
 
 # --- 5. STATE MANAGEMENT (ANTI ERROR) ---
@@ -222,12 +221,3 @@ if G_final is not None:
         if (clicked_lat, clicked_lon) != st.session_state['lokasi_aktif']:
             st.session_state['lokasi_aktif'] = (clicked_lat, clicked_lon)
             st.rerun()
-
-
-
-
-
-
-
-
-
